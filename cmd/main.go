@@ -63,12 +63,12 @@ func main() {
 
 	// A. Repositório (Camada de Acesso a Dados)
 	// Recebe as conexões de Infraestrutura
-	productRepo := productrepo.NewProductRepository(db, cacheClient, cfg.DBTimeout)
+	productRepo := productrepo.NewProductRepository(db, cacheClient, cfg.DBTimeout, log) // Passando o logger para o repositório
 	log.Debug("Repositório de Produto inicializado.", nil)
 
 	// B. Serviço (Camada de Lógica de Negócio)
 	// Recebe o Repositório (a interface domain.ProductRepository)
-	productSvc := productservice.NewService(productRepo)
+	productSvc := productservice.NewService(productRepo, log) // Passando o logger para o serviço
 	log.Debug("Serviço de Produto inicializado.", nil)
 
 	// C. Handler (Camada de Apresentação)
@@ -82,10 +82,10 @@ func main() {
 	log.Debug("Serviço de Tokens JWT inicializado.", nil)
 
 	// C. Repositório de Usuário (Camada de Acesso a Dados)
-	userRepo := userrepo.NewUserRepository(db, cfg.DBTimeout)
+	userRepo := userrepo.NewUserRepository(db, cfg.DBTimeout, log) // Passando o logger para o repositório
 	log.Debug("Repositório de Usuário inicializado.", nil)
 
-	userSvc := userservice.NewService(userRepo, tokenSvc)
+	userSvc := userservice.NewService(userRepo, tokenSvc, log) // Passando o logger para o serviço
 	log.Debug("Serviço de Usuário inicializado.", nil)
 
 	// E. Handler de Usuário
@@ -95,7 +95,50 @@ func main() {
 	// 4. Configuração e Início do Roteador/Servidor
 
 	// O roteador recebe os Handlers e aplica middlewares (futuramente)
-	r := router.NewRouter(productHandler, userHandler, tokenSvc)
+	r := router.NewRouter(productHandler, userHandler, tokenSvc, cacheClient)
+
+	server := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      r, // O roteador final
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// 5. Execução e Graceful Shutdown
+	go func() {
+		log.Info("Servidor GoStock ouvindo na porta", map[string]interface{}{"port": cfg.Port})
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Servidor falhou: %v", err)
+		}
+	}()
+
+	// Lógica do Graceful Shutdown (captura de sinal)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	<-quit
+	log.Info("Sinal de encerramento recebido. Desligando servidor...", nil)
+
+	// Timeout para desligamento (usa o contexto)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Error("Desligamento do servidor forçado.", err)
+	}
+
+	log.Info("Servidor encerrado com sucesso.", nil)
+}
+
+	// E. Handler de Usuário
+	userHandler := user.NewHandler(userSvc, log)
+	log.Debug("Handler de Usuário inicializado.", nil)
+
+	// 4. Configuração e Início do Roteador/Servidor
+
+	// O roteador recebe os Handlers e aplica middlewares (futuramente)
+	r := router.NewRouter(productHandler, userHandler, tokenSvc, cacheClient)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,

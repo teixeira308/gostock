@@ -168,27 +168,129 @@ Busca um produto, implementando a estratégia Cache-Aside.
     curl --location 'http://localhost:8080/v1/products/999d1263-1f11-4adb-a966-e8e4cf340a15'
     ```
 
+### 3. 🛡️ API Features
+
+
+
+#### 3.1 Rate Limiting
+
+
+
+A API implementa um middleware de Rate Limiting para proteger contra abusos e garantir a estabilidade do serviço.
+
+
+
+**Como Funciona:**
+
+
+
+*   **Baseado em IP:** O limite é aplicado por endereço IP do cliente.
+
+*   **Armazenamento em Cache:** Utiliza o Redis para armazenar a contagem de requisições de cada IP e o tempo de expiração.
+
+*   **Limite Atual:** Atualmente configurado para **10 requisições por minuto** por IP.
+
+*   **Endpoints Protegidos:** As rotas de criação/gerenciamento de produtos (`/v1/products`) e as rotas de autenticação (`/v1/register`, `/v1/login`) são protegidas por Rate Limiting.
+
+*   **Resposta:** Se o limite for excedido, a API retorna um status `429 Too Many Requests`.
+
+*   **Headers:** As respostas incluem os seguintes cabeçalhos para informar o status do Rate Limiting:
+
+    *   `X-RateLimit-Remaining`: Número de requisições restantes para o período atual.
+
+
+
+**Exemplo (Tentativa de exceder o limite):**
+
+```bash
+
+# Faça 11+ requisições em menos de um minuto para uma rota protegida
+
+curl -v http://localhost:8080/v1/login
+
+```
+
+A 11ª requisição (e subsequentes dentro do minuto) retornará:
+
+```
+
+< HTTP/1.1 429 Too Many Requests
+
+< Content-Type: text/plain; charset=utf-8
+
+< X-Content-Type-Options: nosniff
+
+< Date: [Data e Hora]
+
+< Content-Length: 19
+
+
+
+Rate limit exceeded
+
+```
+
+
+
+#### 3.2 Graceful Shutdown
+
+
+
+O servidor HTTP da API está configurado para um desligamento gracioso.
+
+
+
+**Como Funciona:**
+
+
+
+*   **Escuta de Sinais:** O servidor ouve por sinais do sistema operacional (`SIGTERM`, `SIGINT`).
+
+*   **Conclusão de Requisições Ativas:** Ao receber um desses sinais, o servidor tenta concluir todas as requisições ativas antes de ser completamente desligado. Isso evita interrupções abruptas para os clientes durante processos de deploy ou reinício.
+
+*   **Implementação:** A lógica para o Graceful Shutdown reside em `cmd/main.go`, onde uma goroutine inicia o servidor e um handler de sinal captura `SIGINT` e `SIGTERM` para chamar `server.Shutdown()` com um timeout.
+
+#### 3.3 Logging
+
+A API utiliza um sistema de logging estruturado para registro de eventos.
+
+**Como Funciona:**
+
+*   **Loggers Customizado:** Implementação de um `Logger` customizado em `internal/pkg/logger/logger.go` que gera logs em formato JSON.
+*   **Níveis de Log:** Suporta diversos níveis de log (`Debug`, `Info`, `Warn`, `Error`, `Fatal`) para diferentes granularidades de informação.
+*   **Uso na Camada Handler:** O logger é injetado e utilizado extensivamente na camada de Handlers (ex: `internal/api/product/handler.go`) para registrar o fluxo da requisição, sucesso, avisos e erros. Erros críticos (500) são registrados com detalhes para auxiliar na depuração.
+*   **Configurável:** O nível de log é configurado via variável de ambiente `LOG_LEVEL`.
+
+
+
 ## 🛣️ Próximos Passos e Roadmap
+
+
 
 A funcionalidade básica de Catálogo de Produtos (CRUD e Cache) e segurança (AuthN/AuthZ) está completa. O trabalho futuro focará em robustez e observabilidade para tornar a API pronta para produção.
 
-### 1. 🛡️ Resiliência e Disponibilidade
 
-Melhorar a capacidade da API de lidar com sobrecarga e garantir o desligamento seguro.
+### 1. 📊 Observabilidade e Monitoramento
 
-* **Rate Limiting:** Implementar um **Middleware** que utiliza o **Redis** para limitar o número de requisições por cliente (baseado em IP ou ID de usuário) dentro de um período, prevenindo abusos e ataques DoS. 
-* **Graceful Shutdown:** Configurar o servidor HTTP para ouvir sinais do sistema operacional (`SIGTERM`, `SIGINT`). Isso garante que o servidor conclua as requisições ativas antes de ser desligado, evitando interrupções para o cliente durante implantações.
 
-### 3. 📊 Observabilidade e Monitoramento
 
 Garantir que a aplicação seja visível e que seu desempenho possa ser rastreado.
 
-* **Implementação do Logger:** Finalizar a configuração do **Logger** em todas as camadas, garantindo o registro adequado de eventos em diferentes níveis (`Debug`, `Info`, `Error`), especialmente para rastrear a causa raiz dos erros 500.
-* **Basic Server Metrics:** Adicionar instrumentação para coletar métricas internas (latência, contagem de erros, uso de memória) e expô-las em um *endpoint* padrão (ex: `/metrics`) para integração com **Prometheus e Grafana**.
 
-### 4. 📝 Manutenção e Documentação
+*   **Implementação do Logger:** Concluído. A integração do **Logger** foi realizada em todas as camadas (Handlers, Services e Repositórios), garantindo o registro adequado de eventos em diferentes níveis (`Debug`, `Info`, `Warn`, `Error`, `Fatal`) para facilitar o rastreamento da causa raiz dos erros.
+
+*   **Basic Server Metrics:** Adicionar instrumentação para coletar métricas internas (latência, contagem de erros, uso de memória) e expô-las em um *endpoint* padrão (ex: `/metrics`) para integração com **Prometheus e Grafana**.
+
+
+
+### 2. 📝 Manutenção e Documentação
+
+
 
 Aumentar a qualidade do código através de testes e melhorar a experiência do desenvolvedor (DX).
 
-* **Testing Overview:** Desenvolver testes unitários para a camada de Serviço (regras de negócio) e testes de integração para o Repositório e Handlers.
-* **Auto Generating Docs (Swagger):** Integrar ferramentas de documentação (*doc generation*) para criar uma especificação OpenAPI (Swagger) automaticamente a partir dos comentários no código, disponibilizando uma interface interativa (ex: `/swagger/index.html`).
+
+
+*   **Testing Overview:** Desenvolver testes unitários para a camada de Serviço (regras de negócio) e testes de integração para o Repositório e Handlers.
+
+*   **Auto Generating Docs (Swagger):** Integrar ferramentas de documentação (*doc generation*) para criar uma especificação OpenAPI (Swagger) automaticamente a partir dos comentários no código, disponibilizando uma interface interativa (ex: `/swagger/index.html`).

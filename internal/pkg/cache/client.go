@@ -13,6 +13,8 @@ type Client interface {
 	Get(ctx context.Context, key string) (string, error)
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
 	Delete(ctx context.Context, key string) error
+	Incr(ctx context.Context, key string) error
+	GetInt(ctx context.Context, key string) (int, error)
 }
 
 // ErrCacheMiss é retornado quando a chave não é encontrada no cache.
@@ -69,4 +71,21 @@ func (c *RedisClient) Set(ctx context.Context, key string, value interface{}, ex
 func (c *RedisClient) Delete(ctx context.Context, key string) error {
 	// Comando DEL, retorna o número de chaves deletadas (0 se não existir)
 	return c.rdb.Del(ctx, key).Err()
+}
+
+// Incr incrementa o valor de uma chave.
+func (c *RedisClient) Incr(ctx context.Context, key string) error {
+	return c.rdb.Incr(ctx, key).Err()
+}
+
+// GetInt recupera o valor associado a uma chave como um inteiro.
+func (c *RedisClient) GetInt(ctx context.Context, key string) (int, error) {
+	val, err := c.rdb.Get(ctx, key).Int()
+	if err == redis.Nil {
+		return 0, ErrCacheMiss
+	}
+	if err != nil {
+		return 0, err
+	}
+	return val, nil
 }

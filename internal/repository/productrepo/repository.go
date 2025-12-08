@@ -11,6 +11,7 @@ import (
 	"gostock/internal/errors"
 	apperror "gostock/internal/errors"
 	"gostock/internal/pkg/cache"
+	"gostock/internal/pkg/logger"
 )
 
 // ProductRepository implementa a interface domain.ProductRepository.
@@ -19,32 +20,37 @@ type ProductRepository struct {
 	DB        *sql.DB      // Conexão principal com o banco de dados (PostgreSQL)
 	Cache     cache.Client // Cliente para operações de cache (Redis)
 	DBTimeout time.Duration
+	logger    logger.Logger
 }
 
 // NewProductRepository cria e retorna uma nova instância do Repositório.
 // Aqui injetamos as dependências de Infraestrutura (DB e Cache).
-func NewProductRepository(db *sql.DB, cacheClient cache.Client, dbTimeout time.Duration) *ProductRepository {
+func NewProductRepository(db *sql.DB, cacheClient cache.Client, dbTimeout time.Duration, logger logger.Logger) *ProductRepository {
 	return &ProductRepository{
 		DB:        db,
 		Cache:     cacheClient,
 		DBTimeout: dbTimeout,
+		logger:    logger,
 	}
 }
 
 // Save persiste um novo Produto e suas Variantes no banco de dados.
 // (Implementa um dos métodos da interface domain.ProductRepository)
 func (r *ProductRepository) Save(ctx context.Context, product domain.Product) (domain.Product, error) {
+	r.logger.Debug("Iniciando Save de produto no repositório.", map[string]interface{}{"sku": product.SKU})
 	ctxTimeout, cancel := context.WithTimeout(ctx, r.DBTimeout)
 	defer cancel()
 
 	tx, err := r.DB.BeginTx(ctxTimeout, nil)
 	if err != nil {
+		r.logger.Error("Falha ao iniciar transação para Save de produto.", err)
 		return domain.Product{}, errors.NewDBError("failed to start tx", err)
 	}
 
 	defer func() {
 		if err != nil {
 			tx.Rollback()
+			r.logger.Warn("Transação de Save de produto desfeita devido a erro.", nil)
 		}
 	}()
 
@@ -66,8 +72,10 @@ func (r *ProductRepository) Save(ctx context.Context, product domain.Product) (d
 	)
 
 	if err != nil {
+		r.logger.Error("Falha ao inserir produto no DB.", err)
 		return domain.Product{}, errors.NewDBError("failed to insert product", err)
 	}
+	r.logger.Debug("Produto inserido no DB.", map[string]interface{}{"product_id": product.ID, "sku": product.SKU})
 
 	const variantSQL = `INSERT INTO variants(id, product_id, attribute, value, barcode, price_diff)
                         VALUES ($1,$2,$3,$4,$5,$6)`
@@ -82,14 +90,18 @@ func (r *ProductRepository) Save(ctx context.Context, product domain.Product) (d
 			v.PriceDiff,
 		)
 		if err != nil {
+			r.logger.Error("Falha ao inserir variante no DB.", err)
 			return domain.Product{}, errors.NewDBError("failed to insert variants", err)
 		}
+		r.logger.Debug("Variante inserida no DB.", map[string]interface{}{"variant_id": v.ID, "product_id": v.ProductID})
 	}
 
 	if err = tx.Commit(); err != nil {
+		r.logger.Error("Falha ao commitar transação para Save de produto.", err)
 		return domain.Product{}, errors.NewDBError("failed to commit tx", err)
 	}
 
+	r.logger.Info("Produto e variantes salvos com sucesso no repositório.", map[string]interface{}{"product_id": product.ID, "sku": product.SKU})
 	return product, nil
 }
 
@@ -100,6 +112,7 @@ const productCacheKey = "product:%s"
 // FindByID busca um produto pelo ID, utilizando a estratégia Cache-Aside.
 // (Implementa um dos métodos da interface domain.ProductRepository)
 func (r *ProductRepository) FindByID(ctx domain.Context, id string) (domain.Product, error) {
+	r.logger.Debug("Iniciando FindByID de produto no repositório.", map[string]interface{}{"product_id_attempt": id})
 
 	// 1. Casting e Contexto
 	ctxGo, cancel := context.WithTimeout(ctx.(context.Context),
@@ -118,17 +131,21 @@ func (r *ProductRepository) FindByID(ctx domain.Context, id string) (domain.Prod
 	if err == nil {
 		// Cache HIT
 		if json.Unmarshal([]byte(cachedData), &product) == nil {
+			r.logger.Info("Produto encontrado no cache.", map[string]interface{}{"product_id": id})
 			// Sucesso na desserialização, retorna o produto do cache
 			return product, nil
 		}
+		r.logger.Error("Falha ao desserializar produto do cache.", err)
 		// Se a desserialização falhar, logar e continuar para o DB
 	} else if err != cache.ErrCacheMiss { // ErrCacheMiss indica que a chave não existe
 		// Se houver um erro real de cache (ex: conexão perdida), logamos, mas continuamos.
-		// log.Printf("Aviso: Falha ao ler do cache Redis: %v", err)
+		r.logger.Warn("Erro ao ler do cache Redis (não é um cache miss).", map[string]interface{}{"error": err.Error()})
+	} else {
+		r.logger.Debug("Cache miss para produto.", map[string]interface{}{"product_id": id})
 	}
 
 	// --- 3. Busca no Banco de Dados (PostgreSQL) ---
-
+	r.logger.Debug("Buscando produto no DB.", map[string]interface{}{"product_id": id})
 	// Query SQL
 	productSQL := `
 		SELECT id, sku, name, description, price, is_active, created_at, updated_at
@@ -151,39 +168,46 @@ func (r *ProductRepository) FindByID(ctx domain.Context, id string) (domain.Prod
 
 	// 4. Tratamento do Erro de Busca (Crucial para o 404)
 	if err == sql.ErrNoRows {
+		r.logger.Info("Produto não encontrado no DB.", map[string]interface{}{"product_id": id})
 		// Se não houver linhas, retornamos um erro de Domínio NotFoundError
 		// O Serviço receberá isso e o Handler o mapeará para 404.
 		return domain.Product{}, errors.NewNotFoundError(fmt.Sprintf("Produto com ID %s não existe na base de dados.", id))
 	}
 	if err != nil {
+		r.logger.Error("Falha ao buscar produto no DB.", err)
 		// Qualquer outro erro é um InternalError (DB falhou, timeout, etc.)
 		return domain.Product{}, errors.NewDBError("Falha ao buscar produto no DB", err)
 	}
+	r.logger.Debug("Produto encontrado no DB.", map[string]interface{}{"product_id": product.ID, "sku": product.SKU})
 
 	// --- 5. Estratégia Cache-Aside (WRITE) ---
 	// Se encontrado no DB, populamos o cache para futuras requisições.
 	productJSON, marshalErr := json.Marshal(product)
 	if marshalErr == nil {
+		r.logger.Debug("Salvando produto no cache.", map[string]interface{}{"product_id": product.ID})
 		// Define o produto no cache com uma expiração (TTL)
 		// TTL de 5 minutos, por exemplo (deve vir do config)
 		r.Cache.Set(ctxGo, key, productJSON, 5*time.Minute)
 	} else {
-		// log.Printf("Aviso: Falha ao serializar produto para cache: %v", marshalErr)
+		r.logger.Error("Falha ao serializar produto para cache.", marshalErr)
 	}
 
 	// 🚨 NOVO: Buscar e anexar variações
 	variants, err := r.FindVariantsByProductID(ctx, product.ID)
 	if err != nil {
+		r.logger.Warn("Falha ao buscar variações para o produto (pode ser aceitável).", map[string]interface{}{"product_id": product.ID, "error": err.Error()})
 		// Se a busca de variações falhar, logamos mas podemos optar por retornar o produto sem elas
 		// Ou retornar o erro, dependendo da criticidade. Retornar o erro é mais seguro.
 		return domain.Product{}, err
 	}
 	product.Variants = variants
+	r.logger.Info("Produto e suas variantes recuperados com sucesso do repositório.", map[string]interface{}{"product_id": product.ID, "sku": product.SKU})
 	return product, nil
 }
 
 // FindVariantsByProductID busca todas as variações para um dado ID de produto.
 func (r *ProductRepository) FindVariantsByProductID(ctx domain.Context, productID string) ([]domain.Variant, error) {
+	r.logger.Debug("Iniciando busca de variantes por ProductID.", map[string]interface{}{"product_id": productID})
 	ctxTimeout, cancel := context.WithTimeout(ctx.(context.Context), r.DBTimeout)
 	defer cancel()
 
@@ -195,6 +219,7 @@ func (r *ProductRepository) FindVariantsByProductID(ctx domain.Context, productI
 
 	rows, err := r.DB.QueryContext(ctxTimeout, query, productID)
 	if err != nil {
+		r.logger.Error("Falha ao executar QueryContext para buscar variantes.", err)
 		return nil, apperror.NewDBError("Falha ao buscar variações do produto (DB)", err)
 	}
 	defer rows.Close()
@@ -210,6 +235,7 @@ func (r *ProductRepository) FindVariantsByProductID(ctx domain.Context, productI
 			&priceDiff, // Scan para NullFloat64
 		)
 		if err != nil {
+			r.logger.Error("Falha ao mapear linha de variante do DB.", err)
 			return nil, apperror.NewDBError("Falha ao mapear variações do produto (DB)", err)
 		}
 
@@ -222,8 +248,10 @@ func (r *ProductRepository) FindVariantsByProductID(ctx domain.Context, productI
 	}
 
 	if err := rows.Err(); err != nil {
+		r.logger.Error("Erro após iteração das linhas de variantes do DB.", err)
 		return nil, apperror.NewDBError("Erro após iteração de variações (DB)", err)
 	}
 
+	r.logger.Info("Variantes encontradas com sucesso.", map[string]interface{}{"product_id": productID, "count": len(variants)})
 	return variants, nil
 }

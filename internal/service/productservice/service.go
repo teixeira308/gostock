@@ -12,6 +12,7 @@ import (
 
 	"gostock/internal/domain"
 	apperror "gostock/internal/errors" // 🚨 CORREÇÃO: Usar o nome renomeado para evitar conflito
+	"gostock/internal/pkg/logger"
 )
 
 // ProductRepository define o contrato (interface) que este Serviço espera
@@ -27,26 +28,30 @@ type ProductRepository interface {
 // Service é a estrutura que implementa a interface domain.ProductService.
 type Service struct {
 	repo ProductRepository
+	logger logger.Logger
 }
 
 // NewService cria e retorna uma nova instância do Serviço de Produto.
-func NewService(repo ProductRepository) *Service {
-	return &Service{repo: repo}
+func NewService(repo ProductRepository, logger logger.Logger) *Service {
+	return &Service{repo: repo, logger: logger}
 }
 
 // --- Implementação: CreateProduct ---
 func (s *Service) CreateProduct(ctx domain.Context, product domain.Product, variants []domain.Variant) (domain.Product, error) {
+	s.logger.Debug("Iniciando criação de produto no serviço.", map[string]interface{}{"sku": product.SKU})
 
 	product.Variants = variants
 
 	// 🚨 NOVO: 1. Validação de Domínio
 	if err := s.validateProduct(product); err != nil {
+		s.logger.Warn("Falha na validação do produto ao criar.", map[string]interface{}{"sku": product.SKU, "error": err.Error()})
 		return domain.Product{}, err
 	}
 
 	// 2. Geração de IDs (se a variação não tiver ID, o serviço a define)
 	if product.ID == "" {
 		product.ID = uuid.New().String()
+		s.logger.Debug("Gerado novo ID para o produto.", map[string]interface{}{"product_id": product.ID})
 	}
 	product.IsActive = true
 	now := time.Now().UTC()
@@ -56,6 +61,7 @@ func (s *Service) CreateProduct(ctx domain.Context, product domain.Product, vari
 	for i := range product.Variants {
 		if product.Variants[i].ID == "" {
 			product.Variants[i].ID = uuid.New().String()
+			s.logger.Debug("Gerado novo ID para a variante.", map[string]interface{}{"variant_id": product.Variants[i].ID})
 		}
 		// Linkar a chave estrangeira (ProductID)
 		product.Variants[i].ProductID = product.ID
@@ -65,23 +71,28 @@ func (s *Service) CreateProduct(ctx domain.Context, product domain.Product, vari
 	ctxGo, ok := ctx.(context.Context)
 	if !ok {
 		ctxGo = context.Background()
+		s.logger.Warn("Contexto de domínio inválido, usando context.Background()", nil)
 	}
 
 	// 3. Delegação para a Camada de Persistência (Repository)
 	createdProduct, err := s.repo.Save(ctxGo, product) // Chamada com ctxGo
 	if err != nil {
+		s.logger.Error("Falha ao salvar produto no repositório.", err)
 		// Propaga o erro retornado pelo Repositório (que deve ser um apperror.InternalError ou similar)
 		return domain.Product{}, fmt.Errorf("falha ao salvar produto no repositório: %w", err)
 	}
 
+	s.logger.Info("Produto criado com sucesso.", map[string]interface{}{"product_id": createdProduct.ID, "sku": createdProduct.SKU})
 	return createdProduct, nil
 }
 
 // --- Implementação: GetProductByID (Única e Corrigida) ---
 func (s *Service) GetProductByID(ctx domain.Context, id string) (domain.Product, error) {
+	s.logger.Debug("Iniciando busca de produto por ID no serviço.", map[string]interface{}{"product_id_attempt": id})
 
 	// 1. Validação de Formato (Business Logic)
 	if _, err := uuid.Parse(id); err != nil {
+		s.logger.Warn("ID de produto inválido fornecido.", map[string]interface{}{"product_id_provided": id, "error": err.Error()})
 		return domain.Product{}, apperror.NewValidationError("O ID do produto deve ser um UUID válido.")
 	}
 
@@ -89,6 +100,7 @@ func (s *Service) GetProductByID(ctx domain.Context, id string) (domain.Product,
 	ctxGo, ok := ctx.(context.Context)
 	if !ok {
 		ctxGo = context.Background()
+		s.logger.Warn("Contexto de domínio inválido, usando context.Background()", nil)
 	}
 
 	// 3. Delegação para o Repositório
@@ -101,14 +113,17 @@ func (s *Service) GetProductByID(ctx domain.Context, id string) (domain.Product,
 		// 🚨 CORREÇÃO: Usar errors.Is do pacote nativo Go para verificar a cadeia de erros
 		var notFound *apperror.NotFoundError
 		if errors.Is(err, notFound) {
+			s.logger.Info("Produto não encontrado.", map[string]interface{}{"product_id": id})
 			// Se o Repositório retornou NotFound, retornamos o erro de negócio 404.
 			return domain.Product{}, apperror.NewNotFoundError(fmt.Sprintf("Produto com ID %s não foi encontrado.", id))
 		}
 
+		s.logger.Error("Erro ao buscar produto no repositório.", err)
 		// Para qualquer outro erro (DB falhou, conexão perdida - 500), propagamos o erro de infraestrutura.
 		return domain.Product{}, err
 	}
 
+	s.logger.Info("Produto encontrado com sucesso.", map[string]interface{}{"product_id": product.ID, "sku": product.SKU})
 	// 5. Sucesso
 	return product, nil
 }
