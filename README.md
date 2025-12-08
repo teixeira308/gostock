@@ -32,7 +32,7 @@ REDIS_PASSWORD=
 REDIS_DB=0
 
 # Variável de URL para Migrações (Goose)
-# IMPORTANTE: Formato 'postgres://user:password@host:port/dbname?sslmode=disable'
+IMPORTANTE: Formato 'postgres://user:password@host:port/dbname?sslmode=disable'
 DATABASE_URL=postgres://user:password@localhost:5432/gostock_db?sslmode=disable
 Serviços Docker
 Execute os seguintes comandos no terminal para subir o PostgreSQL e o Redis:
@@ -108,5 +108,39 @@ Endpoint: GET /v1/products/{id}
 Status de Sucesso: 200 OK (encontrado) ou 404 Not Found (não encontrado).
 
 Bash
-# Substitua o ID pelo ID do produto criado
+Substitua o ID pelo ID do produto criado
 curl --location 'http://localhost:8080/v1/products/999d1263-1f11-4adb-a966-e8e4cf340a15'
+
+
+
+## 🛣️ Próximos Passos e Roadmap
+
+A funcionalidade básica de Catálogo de Produtos (CRUD e Cache) está completa. O trabalho futuro focará em robustez, segurança e observabilidade para tornar a API pronta para produção.
+
+### 1. 🔒 Segurança (Authentication & Authorization)
+
+Implementar o sistema de identificação e permissões, protegendo os *endpoints* de escrita.
+
+* **Autenticação (AuthN):** Implementar fluxos de Login e Registro. Geração e validação de **JSON Web Tokens (JWTs)** para identificar o usuário.
+* **Autorização (AuthZ):** Criar um **Middleware** para inspecionar os *roles* do usuário (ex: `admin`, `guest`) e restringir o acesso a funcionalidades críticas (ex: apenas `admin` pode deletar um produto).
+
+### 2. 🛡️ Resiliência e Disponibilidade
+
+Melhorar a capacidade da API de lidar com sobrecarga e garantir o desligamento seguro.
+
+* **Rate Limiting:** Implementar um **Middleware** que utiliza o **Redis** para limitar o número de requisições por cliente (baseado em IP ou ID de usuário) dentro de um período, prevenindo abusos e ataques DoS. 
+* **Graceful Shutdown:** Configurar o servidor HTTP para ouvir sinais do sistema operacional (`SIGTERM`, `SIGINT`). Isso garante que o servidor conclua as requisições ativas antes de ser desligado, evitando interrupções para o cliente durante implantações.
+
+### 3. 📊 Observabilidade e Monitoramento
+
+Garantir que a aplicação seja visível e que seu desempenho possa ser rastreado.
+
+* **Implementação do Logger:** Finalizar a configuração do **Logger** em todas as camadas, garantindo o registro adequado de eventos em diferentes níveis (`Debug`, `Info`, `Error`), especialmente para rastrear a causa raiz dos erros 500.
+* **Basic Server Metrics:** Adicionar instrumentação para coletar métricas internas (latência, contagem de erros, uso de memória) e expô-las em um *endpoint* padrão (ex: `/metrics`) para integração com **Prometheus e Grafana**.
+
+### 4. 📝 Manutenção e Documentação
+
+Aumentar a qualidade do código através de testes e melhorar a experiência do desenvolvedor (DX).
+
+* **Testing Overview:** Desenvolver testes unitários para a camada de Serviço (regras de negócio) e testes de integração para o Repositório e Handlers.
+* **Auto Generating Docs (Swagger):** Integrar ferramentas de documentação (*doc generation*) para criar uma especificação OpenAPI (Swagger) automaticamente a partir dos comentários no código, disponibilizando uma interface interativa (ex: `/swagger/index.html`).
