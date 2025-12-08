@@ -16,12 +16,16 @@ import (
 	"gostock/internal/pkg/cache"
 	"gostock/internal/pkg/database"
 	"gostock/internal/pkg/logger"
+	"gostock/internal/pkg/token"
 
 	// Camadas do Produto para Injeção de Dependências
-	"gostock/internal/api/product"            // Handlers
-	"gostock/internal/api/router"             // Roteador central
+	"gostock/internal/api/product" // Handlers
+	"gostock/internal/api/router"  // Roteador central
+	"gostock/internal/api/user"
 	"gostock/internal/repository/productrepo" // Acesso a Dados
+	"gostock/internal/repository/userrepo"
 	"gostock/internal/service/productservice" // Lógica de Negócio
+	"gostock/internal/service/userservice"
 )
 
 func main() {
@@ -72,10 +76,26 @@ func main() {
 	productHandler := product.NewHandler(productSvc, log) // Passando o logger para o handler
 	log.Debug("Handler de Produto inicializado.", nil)
 
+	// C. Serviço de Tokens (JWT)
+	jwtExpiry := time.Hour * time.Duration(cfg.JWTExpiryHours)
+	tokenSvc := token.NewService(cfg.JWTSecretKey, jwtExpiry)
+	log.Debug("Serviço de Tokens JWT inicializado.", nil)
+
+	// C. Repositório de Usuário (Camada de Acesso a Dados)
+	userRepo := userrepo.NewUserRepository(db, cfg.DBTimeout)
+	log.Debug("Repositório de Usuário inicializado.", nil)
+
+	userSvc := userservice.NewService(userRepo, tokenSvc)
+	log.Debug("Serviço de Usuário inicializado.", nil)
+
+	// E. Handler de Usuário
+	userHandler := user.NewHandler(userSvc, log)
+	log.Debug("Handler de Usuário inicializado.", nil)
+
 	// 4. Configuração e Início do Roteador/Servidor
 
 	// O roteador recebe os Handlers e aplica middlewares (futuramente)
-	r := router.NewRouter(productHandler)
+	r := router.NewRouter(productHandler, userHandler, tokenSvc)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,

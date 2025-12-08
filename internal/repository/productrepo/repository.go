@@ -9,6 +9,7 @@ import (
 
 	"gostock/internal/domain"
 	"gostock/internal/errors"
+	apperror "gostock/internal/errors"
 	"gostock/internal/pkg/cache"
 )
 
@@ -32,7 +33,7 @@ func NewProductRepository(db *sql.DB, cacheClient cache.Client, dbTimeout time.D
 
 // Save persiste um novo Produto e suas Variantes no banco de dados.
 // (Implementa um dos métodos da interface domain.ProductRepository)
-func (r *ProductRepository) Save(ctx context.Context, product domain.Product, variants []domain.Variant) (domain.Product, error) {
+func (r *ProductRepository) Save(ctx context.Context, product domain.Product) (domain.Product, error) {
 	ctxTimeout, cancel := context.WithTimeout(ctx, r.DBTimeout)
 	defer cancel()
 
@@ -71,7 +72,7 @@ func (r *ProductRepository) Save(ctx context.Context, product domain.Product, va
 	const variantSQL = `INSERT INTO variants(id, product_id, attribute, value, barcode, price_diff)
                         VALUES ($1,$2,$3,$4,$5,$6)`
 
-	for _, v := range variants {
+	for _, v := range product.Variants {
 		_, err = tx.ExecContext(ctxTimeout, variantSQL,
 			v.ID,
 			v.ProductID,
@@ -170,5 +171,59 @@ func (r *ProductRepository) FindByID(ctx domain.Context, id string) (domain.Prod
 		// log.Printf("Aviso: Falha ao serializar produto para cache: %v", marshalErr)
 	}
 
+	// 🚨 NOVO: Buscar e anexar variações
+	variants, err := r.FindVariantsByProductID(ctx, product.ID)
+	if err != nil {
+		// Se a busca de variações falhar, logamos mas podemos optar por retornar o produto sem elas
+		// Ou retornar o erro, dependendo da criticidade. Retornar o erro é mais seguro.
+		return domain.Product{}, err
+	}
+	product.Variants = variants
 	return product, nil
+}
+
+// FindVariantsByProductID busca todas as variações para um dado ID de produto.
+func (r *ProductRepository) FindVariantsByProductID(ctx domain.Context, productID string) ([]domain.Variant, error) {
+	ctxTimeout, cancel := context.WithTimeout(ctx.(context.Context), r.DBTimeout)
+	defer cancel()
+
+	query := `
+        SELECT id, product_id, attribute, value, barcode, price_diff
+        FROM variants
+        WHERE product_id = $1
+    `
+
+	rows, err := r.DB.QueryContext(ctxTimeout, query, productID)
+	if err != nil {
+		return nil, apperror.NewDBError("Falha ao buscar variações do produto (DB)", err)
+	}
+	defer rows.Close()
+
+	variants := make([]domain.Variant, 0)
+
+	for rows.Next() {
+		var v domain.Variant
+		var priceDiff sql.NullFloat64 // Usar NullFloat64 para lidar com valores NULL no DB
+
+		err := rows.Scan(
+			&v.ID, &v.ProductID, &v.Attribute, &v.Value, &v.Barcode,
+			&priceDiff, // Scan para NullFloat64
+		)
+		if err != nil {
+			return nil, apperror.NewDBError("Falha ao mapear variações do produto (DB)", err)
+		}
+
+		// Atribui o valor de PriceDiff se não for NULL
+		if priceDiff.Valid {
+			v.PriceDiff = priceDiff.Float64
+		}
+
+		variants = append(variants, v)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, apperror.NewDBError("Erro após iteração de variações (DB)", err)
+	}
+
+	return variants, nil
 }

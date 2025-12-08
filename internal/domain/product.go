@@ -18,6 +18,7 @@ type Product struct {
 
 	// Relações (serão gerenciadas por outras entidades/serviços)
 	// Variantes []Variant // Exemplo: Lista de tamanhos/cores
+	Variants []Variant `json:"variants"`
 }
 
 // Variant representa as variações de um Produto (e.g., cor, tamanho).
@@ -36,7 +37,7 @@ type Variant struct {
 // ProductService é a interface que a camada de Serviço (Business Logic) DEVE implementar.
 // Ela define o que o Handler (Camada API) pode pedir para a camada de Serviço fazer.
 type ProductService interface {
-	CreateProduct(ctx Context, product Product, variants []Variant) (Product, error)
+	CreateProduct(ctx Context, product Product) (Product, error)
 	GetProductByID(ctx Context, id string) (Product, error)
 	ListProducts(ctx Context, filter ProductFilter) ([]Product, error)
 	UpdateProduct(ctx Context, product Product) error
@@ -46,7 +47,7 @@ type ProductService interface {
 // ProductRepository é a interface que a camada de Repositório (Data Access) DEVE implementar.
 // Ela define o que a camada de Serviço (Service) pode pedir para a camada de Persistência (DB/Cache) fazer.
 type ProductRepository interface {
-	Save(ctx Context, product Product, variants []Variant) (Product, error)
+	Save(ctx Context, product Product) (Product, error)
 	FindByID(ctx Context, id string) (Product, error)
 	FindAll(ctx Context, filter ProductFilter) ([]Product, error)
 	Update(ctx Context, product Product) error

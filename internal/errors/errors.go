@@ -98,3 +98,18 @@ func MapToHTTPStatus(err error) (int, string, string) {
 	// Tratar como erro interno genérico.
 	return http.StatusInternalServerError, "UNKNOWN_ERROR", "Ocorreu um erro inesperado."
 }
+
+// UnauthorizedError representa falha na autenticação (credenciais inválidas ou token ausente/inválido).
+type UnauthorizedError struct {
+	Msg string
+}
+
+func (e *UnauthorizedError) Error() string    { return fmt.Sprintf("Não Autorizado: %s", e.Msg) }
+func (e *UnauthorizedError) Category() string { return "UNAUTHORIZED" }
+func (e *UnauthorizedError) HTTPStatus() int  { return http.StatusUnauthorized } // 401
+func (e *UnauthorizedError) Unwrap() error    { return nil }
+
+// NewUnauthorizedError cria um novo erro de autenticação/autorização falha.
+func NewUnauthorizedError(msg string) AppError {
+	return &UnauthorizedError{Msg: msg}
+}

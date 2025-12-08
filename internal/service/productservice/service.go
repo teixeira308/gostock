@@ -20,7 +20,7 @@ import (
 type ProductRepository interface {
 	// 🚨 CORREÇÃO DE ASSINATURA: A implementação deve usar context.Context nativo,
 	// pois o Repositório é a camada de infraestrutura.
-	Save(ctx context.Context, product domain.Product, variants []domain.Variant) (domain.Product, error)
+	Save(ctx context.Context, product domain.Product) (domain.Product, error)
 	FindByID(ctx domain.Context, id string) (domain.Product, error)
 }
 
@@ -37,21 +37,14 @@ func NewService(repo ProductRepository) *Service {
 // --- Implementação: CreateProduct ---
 func (s *Service) CreateProduct(ctx domain.Context, product domain.Product, variants []domain.Variant) (domain.Product, error) {
 
-	// 1. Casting e Contexto
-	ctxGo, ok := ctx.(context.Context)
-	if !ok {
-		ctxGo = context.Background()
+	product.Variants = variants
+
+	// 🚨 NOVO: 1. Validação de Domínio
+	if err := s.validateProduct(product); err != nil {
+		return domain.Product{}, err
 	}
 
-	// 2. Validação de Regras de Negócio
-	if product.Name == "" || product.SKU == "" {
-		return domain.Product{}, apperror.NewValidationError("Nome e SKU são obrigatórios para o produto.")
-	}
-	if product.Price <= 0 {
-		return domain.Product{}, apperror.NewValidationError("O preço do produto deve ser positivo.")
-	}
-
-	// ... (Preenchimento de IDs, IsActive, CreatedAt/UpdatedAt) ...
+	// 2. Geração de IDs (se a variação não tiver ID, o serviço a define)
 	if product.ID == "" {
 		product.ID = uuid.New().String()
 	}
@@ -59,18 +52,23 @@ func (s *Service) CreateProduct(ctx domain.Context, product domain.Product, vari
 	now := time.Now().UTC()
 	product.CreatedAt = now
 	product.UpdatedAt = now
-	for i := range variants {
-		if variants[i].ID == "" {
-			variants[i].ID = uuid.New().String()
+
+	for i := range product.Variants {
+		if product.Variants[i].ID == "" {
+			product.Variants[i].ID = uuid.New().String()
 		}
-		variants[i].ProductID = product.ID
-		if variants[i].Attribute == "" || variants[i].Value == "" {
-			return domain.Product{}, apperror.NewValidationError(fmt.Sprintf("Variante %d requer Atributo e Valor.", i+1))
-		}
+		// Linkar a chave estrangeira (ProductID)
+		product.Variants[i].ProductID = product.ID
+	}
+
+	// 1. Casting e Contexto
+	ctxGo, ok := ctx.(context.Context)
+	if !ok {
+		ctxGo = context.Background()
 	}
 
 	// 3. Delegação para a Camada de Persistência (Repository)
-	createdProduct, err := s.repo.Save(ctxGo, product, variants) // Chamada com ctxGo
+	createdProduct, err := s.repo.Save(ctxGo, product) // Chamada com ctxGo
 	if err != nil {
 		// Propaga o erro retornado pelo Repositório (que deve ser um apperror.InternalError ou similar)
 		return domain.Product{}, fmt.Errorf("falha ao salvar produto no repositório: %w", err)
@@ -113,4 +111,36 @@ func (s *Service) GetProductByID(ctx domain.Context, id string) (domain.Product,
 
 	// 5. Sucesso
 	return product, nil
+}
+
+// validateProduct verifica as regras de negócio básicas do produto e suas variações.
+func (s *Service) validateProduct(p domain.Product) error {
+	if p.SKU == "" {
+		return apperror.NewValidationError("O SKU do produto é obrigatório.")
+	}
+	if p.Name == "" {
+		return apperror.NewValidationError("O nome do produto é obrigatório.")
+	}
+	if p.Price <= 0 {
+		return apperror.NewValidationError("O preço do produto deve ser um valor positivo.")
+	}
+
+	// Validação das Variações
+	if len(p.Variants) == 0 {
+		return apperror.NewValidationError("O produto deve ter pelo menos uma variação.")
+	}
+
+	for i, v := range p.Variants {
+		if v.Attribute == "" || v.Value == "" {
+			return apperror.NewValidationError(fmt.Sprintf("Atributo ou valor da variação %d está vazio.", i+1))
+		}
+		if v.PriceDiff < 0 {
+			return apperror.NewValidationError(fmt.Sprintf("A diferença de preço da variação %d não pode ser negativa.", i+1))
+		}
+		if v.Barcode == "" {
+			return apperror.NewValidationError(fmt.Sprintf("O código de barras da variação %d é obrigatório.", i+1))
+		}
+	}
+
+	return nil
 }

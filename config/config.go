@@ -24,8 +24,8 @@ type Config struct {
 	CacheTimeout time.Duration
 
 	// Segurança (JWT)
-	JWTSecretKey string
-	TokenExpiry  time.Duration
+	JWTSecretKey   string
+	JWTExpiryHours int
 
 	// Rate Limiting (RNF 5.2)
 	RateLimitMaxRequests int
@@ -53,8 +53,8 @@ func LoadConfig() *Config {
 		CacheTimeout: getDurationEnv("CACHE_TIMEOUT_SEC", 10) * time.Second, // 10s padrão
 
 		// 4. Segurança (JWT)
-		JWTSecretKey: mustGetEnv("JWT_SECRET_KEY"),
-		TokenExpiry:  getDurationEnv("JWT_EXPIRY_MIN", 60) * time.Minute, // 60 min padrão
+		JWTSecretKey:   mustGetEnv("JWT_SECRET_KEY"),
+		JWTExpiryHours: getIntEnv("JWT_EXPIRY_HOURS", 24), // 60 min padrão
 
 		// 5. Rate Limiting
 		RateLimitMaxRequests: getIntEnv("RATE_LIMIT_MAX_REQUESTS", 100),

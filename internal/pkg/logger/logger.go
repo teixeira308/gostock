@@ -14,6 +14,7 @@ type Logger interface {
 	Info(msg string, fields map[string]interface{})
 	Error(msg string, err error)
 	Fatal(msg string, err error)
+	Warn(msg string, fields map[string]interface{})
 }
 
 // LogEntry define a estrutura de um log para garantir o formato JSON.
@@ -110,4 +111,8 @@ func (l *SimpleLogger) Error(msg string, err error) {
 
 func (l *SimpleLogger) Fatal(msg string, err error) {
 	l.logf("FATAL", msg, nil, err)
+}
+
+func (l *SimpleLogger) Warn(msg string, fields map[string]interface{}) {
+	l.logf("WARN", msg, fields, nil)
 }

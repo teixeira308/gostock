@@ -7,6 +7,7 @@ import (
 	"gostock/internal/domain"
 	apperror "gostock/internal/errors"
 	"gostock/internal/pkg/logger" // Importação correta do nosso pacote Logger
+	"gostock/internal/pkg/middleware"
 	"net/http"
 	"strings"
 )
@@ -93,18 +94,32 @@ func (h *Handler) CreateProductHandler(w http.ResponseWriter, r *http.Request) {
 	// O contexto nativo (context.Context) será passado como domain.Context
 	ctx := r.Context()
 
+	claims, ok := middleware.GetUserClaimsFromContext(ctx)
+	if ok {
+		// Logamos o ID do usuário que está criando o produto
+		h.Logger.Info("Tentativa de criação de produto por", map[string]interface{}{
+			"user_id": claims.UserID,
+			"role":    claims.Role,
+		})
+
+		// Você usaria este ID para anexar o criador ao produto (product.CreatorID = claims.UserID)
+	} else {
+		// Isso só aconteceria se o middleware falhasse ou fosse ignorado na rota, mas é uma boa prática
+		h.Logger.Warn("Tentativa de criação de produto sem claims de usuário no contexto.", nil)
+	}
+
 	// Decodificação do Payload (Usando struct anônima temporária para incluir Variants)
 	var productRequest struct {
-		Product  domain.Product
-		Variants []domain.Variant
+		Product  domain.Product   `json:"Product"`
+		Variants []domain.Variant `json:"Variants"`
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&productRequest); err != nil {
 		// Usa a função padronizada para erros de validação
-		h.handleServiceResponse(w, r, nil, apperror.NewValidationError("Payload inválido. Verifique o formato JSON."), http.StatusCreated)
+		// (Ajustei o status para 400 Bad Request, que é o correto para erro de payload)
+		h.handleServiceResponse(w, r, nil, apperror.NewValidationError("Payload inválido. Verifique o formato JSON."), http.StatusBadRequest)
 		return
 	}
-
+	productRequest.Product.Variants = productRequest.Variants
 	// 1. Chamar o Serviço (Lógica de Negócio)
 	newProduct, err := h.Service.CreateProduct(ctx, productRequest.Product, productRequest.Variants)
 
@@ -138,60 +153,41 @@ func (h *Handler) CreateProductHandler(w http.ResponseWriter, r *http.Request) {
 
 // GetProductByIDHandler lida com a requisição GET /v1/products/{id}.
 func (h *Handler) GetProductByIDHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)
-		return
-	}
 
 	ctx := r.Context()
 
 	// 1. Extrair ID do Segmento da URL
-	// Assumimos que a URL foi roteada corretamente e o ID está no caminho.
-	// Exemplo de extração simples:
-	segments := r.URL.Path
-	if len(segments) == 0 {
-		h.handleServiceResponse(w, r, nil, apperror.NewValidationError("ID do produto ausente na URL."), http.StatusOK)
-		return
-	}
 
-	// Supondo uma URL como /v1/products/UUID
-	// Vamos usar a função auxiliar para extrair o ID
-	id := extractIDFromURL(r.URL.Path)
+	// a. Remove barras extras no início e no fim para normalizar
+	path := strings.Trim(r.URL.Path, "/")
+	// b. Divide a string em segmentos: ["v1", "products", "3c95b8c8..."]
+	segments := strings.Split(path, "/")
 
-	if id == "" {
+	// O ID deve ser o último segmento (índice 2, pois o roteador já validou len == 3)
+	if len(segments) != 3 {
+		// Se a validação do router falhar, retornamos 400 (Bad Request)
 		h.handleServiceResponse(w, r, nil, apperror.NewValidationError("Formato de URL inválido ou ID ausente."), http.StatusOK)
 		return
 	}
 
+	productID := segments[2]
+
+	// Verificação de ID vazio (embora o len(segments) == 3 já minimize isso)
+	if productID == "" {
+		h.handleServiceResponse(w, r, nil, apperror.NewValidationError("ID do produto é obrigatório."), http.StatusOK)
+		return
+	}
+
 	// 2. Chamar o Serviço (Lógica de Negócio)
-	product, err := h.Service.GetProductByID(ctx, id)
+	product, err := h.Service.GetProductByID(ctx, productID)
 
 	// 3. Tratamento de Erro
 	if err != nil {
-		// Log detalhado de erros 500 (mesmo padrão do CreateProductHandler)
-		var internalErr *apperror.InternalError
-		if errors.As(err, &internalErr) {
-			h.Logger.Error("ERRO CRÍTICO (500) NA BUSCA DO PRODUTO:", internalErr)
-			// handleServiceResponse retornará 500 genérico
-		}
-
-		// Se for um NotFoundError (404), o handleServiceResponse fará o mapeamento
-		// Se for um InternalError (500), o handleServiceResponse fará o mapeamento
+		// O handleServiceResponse fará o mapeamento de NotFoundError (404) ou InternalError (500)
 		h.handleServiceResponse(w, r, nil, err, http.StatusOK)
 		return
 	}
 
 	// 4. Resposta de Sucesso (200 OK)
 	h.handleServiceResponse(w, r, product, nil, http.StatusOK)
-}
-
-// extractIDFromURL é uma função simples para extrair o último segmento de uma URL /path/to/id
-// OBS: Em um projeto real, usar um router como Gorilla Mux ou Chi simplificaria isso.
-func extractIDFromURL(path string) string {
-	// A rota esperada é /v1/products/ID
-	parts := strings.Split(path, "/")
-	if len(parts) > 0 && parts[len(parts)-1] != "products" && parts[len(parts)-1] != "v1" {
-		return parts[len(parts)-1]
-	}
-	return ""
 }
