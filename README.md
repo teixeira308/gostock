@@ -75,56 +75,104 @@ O servidor estará disponível em http://localhost:8080.
 🧪 Funcionalidades Implementadas (Testadas via Postman/Curl)
 As seguintes endpoints foram implementadas, cobrindo o fluxo de criação e leitura do produto, desde o Handler até a persistência no DB/Cache.
 
-1. Criar Produto (POST)
-Cria um produto principal e suas variantes, garantindo a atomicidade via Transação SQL no Repositório.
+### 1. 👤 Autenticação e Autorização (JWT)
+A API implementa um sistema de segurança baseado em JSON Web Tokens (JWT) para proteger endpoints sensíveis.
 
-Endpoint: POST /v1/products
+**Fluxo de Autenticação:**
+1.  **Registro:** Um novo usuário é criado através do endpoint `POST /v1/users/register`.
+2.  **Login:** O usuário se autentica com email e senha no endpoint `POST /v1/users/login`.
+3.  **Token:** A API retorna um token JWT, que deve ser incluído no cabeçalho `Authorization` de todas as requisições subsequentes a endpoints protegidos.
 
-Status de Sucesso: 201 Created
+**Endpoints de Autenticação:**
 
-Bash
-curl --location 'http://localhost:8080/v1/products' \
---header 'Content-Type: application/json' \
---data '{
-    "Product": {
-        "sku": "PROD-1001-XYZ",
-        "name": "Smartwatch Pro X",
-        "description": "Relógio inteligente com monitoramento cardíaco e GPS.",
-        "price": 499.90
-    },
-    "Variants": [
-        {
-            "attribute": "Cor",
-            "value": "Preto",
-            "barcode": "123456789001"
-        }
-    ]
-}'
-2. Obter Produto por ID (GET)
-Busca um produto, implementando a estratégia Cache-Aside (lê do Redis primeiro, salva no Redis após ler do PostgreSQL).
+**a) Registrar Novo Usuário**
 
-Endpoint: GET /v1/products/{id}
+Cria um novo usuário no sistema.
 
-Status de Sucesso: 200 OK (encontrado) ou 404 Not Found (não encontrado).
+*   **Endpoint:** `POST /v1/users/register`
+*   **Status de Sucesso:** `201 Created`
+*   **Exemplo:**
+    ```bash
+    curl --location 'http://localhost:8080/v1/users/register' \
+    --header 'Content-Type: application/json' \
+    --data '{
+        "name": "Admin User",
+        "email": "admin@gostock.com",
+        "password": "strongpassword123"
+    }'
+    ```
 
-Bash
-Substitua o ID pelo ID do produto criado
-curl --location 'http://localhost:8080/v1/products/999d1263-1f11-4adb-a966-e8e4cf340a15'
+**b) Realizar Login**
 
+Autentica o usuário e retorna um token JWT.
 
+*   **Endpoint:** `POST /v1/users/login`
+*   **Status de Sucesso:** `200 OK`
+*   **Exemplo:**
+    ```bash
+    curl --location 'http://localhost:8080/v1/users/login' \
+    --header 'Content-Type: application/json' \
+    --data '{
+        "email": "admin@gostock.com",
+        "password": "strongpassword123"
+    }'
+    ```
+    **Resposta de Sucesso (Exemplo):**
+    ```json
+    {
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    ```
+
+### 2. 📦 Produtos
+Endpoints para gerenciamento do catálogo de produtos.
+
+**a) Criar Produto (Requer Autenticação)**
+
+Cria um produto principal e suas variantes. Este endpoint é protegido e requer um token JWT válido.
+
+*   **Endpoint:** `POST /v1/products`
+*   **Status de Sucesso:** `201 Created`
+*   **Exemplo:**
+    ```bash
+    # Substitua SEU_TOKEN_JWT pelo token obtido no login
+    curl --location 'http://localhost:8080/v1/products' \
+    --header 'Authorization: Bearer SEU_TOKEN_JWT' \
+    --header 'Content-Type: application/json' \
+    --data '{
+        "Product": {
+            "sku": "PROD-1001-XYZ",
+            "name": "Smartwatch Pro X",
+            "description": "Relógio inteligente com monitoramento cardíaco e GPS.",
+            "price": 499.90
+        },
+        "Variants": [
+            {
+                "attribute": "Cor",
+                "value": "Preto",
+                "barcode": "123456789001"
+            }
+        ]
+    }'
+    ```
+
+**b) Obter Produto por ID (Público)**
+
+Busca um produto, implementando a estratégia Cache-Aside.
+
+*   **Endpoint:** `GET /v1/products/{id}`
+*   **Status de Sucesso:** `200 OK` (encontrado) ou `404 Not Found` (não encontrado).
+*   **Exemplo:**
+    ```bash
+    # Substitua o ID pelo ID do produto criado
+    curl --location 'http://localhost:8080/v1/products/999d1263-1f11-4adb-a966-e8e4cf340a15'
+    ```
 
 ## 🛣️ Próximos Passos e Roadmap
 
-A funcionalidade básica de Catálogo de Produtos (CRUD e Cache) está completa. O trabalho futuro focará em robustez, segurança e observabilidade para tornar a API pronta para produção.
+A funcionalidade básica de Catálogo de Produtos (CRUD e Cache) e segurança (AuthN/AuthZ) está completa. O trabalho futuro focará em robustez e observabilidade para tornar a API pronta para produção.
 
-### 1. 🔒 Segurança (Authentication & Authorization)
-
-Implementar o sistema de identificação e permissões, protegendo os *endpoints* de escrita.
-
-* **Autenticação (AuthN):** Implementar fluxos de Login e Registro. Geração e validação de **JSON Web Tokens (JWTs)** para identificar o usuário.
-* **Autorização (AuthZ):** Criar um **Middleware** para inspecionar os *roles* do usuário (ex: `admin`, `guest`) e restringir o acesso a funcionalidades críticas (ex: apenas `admin` pode deletar um produto).
-
-### 2. 🛡️ Resiliência e Disponibilidade
+### 1. 🛡️ Resiliência e Disponibilidade
 
 Melhorar a capacidade da API de lidar com sobrecarga e garantir o desligamento seguro.
 
