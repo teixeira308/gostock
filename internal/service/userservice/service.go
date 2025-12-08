@@ -133,7 +133,7 @@ func (s *UserService) Login(ctx context.Context, email string, password string) 
 }
 
 // validateProduct verifica as regras de negócio básicas do produto e suas variações.
-func (s *Service) validateProduct(p domain.Product) error {
+func (s *UserService) validateProduct(p domain.Product) error {
 	if p.SKU == "" {
 		return apperror.NewValidationError("O SKU do produto é obrigatório.")
 	}
