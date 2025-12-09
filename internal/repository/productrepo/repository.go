@@ -255,3 +255,107 @@ func (r *ProductRepository) FindVariantsByProductID(ctx domain.Context, productI
 	r.logger.Info("Variantes encontradas com sucesso.", map[string]interface{}{"product_id": productID, "count": len(variants)})
 	return variants, nil
 }
+
+// FindAll busca uma lista de produtos, aplicando filtros e paginação.
+// (Implementa um dos métodos da interface domain.ProductRepository)
+func (r *ProductRepository) FindAll(ctx context.Context, filter domain.ProductFilter) ([]domain.Product, error) {
+	r.logger.Debug("Iniciando FindAll de produtos no repositório.", map[string]interface{}{"filter": filter})
+
+	ctxGo, cancel := context.WithTimeout(ctx.(context.Context), r.DBTimeout)
+	defer cancel()
+
+	// --- 1. Construção Dinâmica da Query ---
+
+	// Base da Query
+	query := `
+        SELECT id, sku, name, description, price, is_active, created_at, updated_at
+        FROM products 
+        WHERE 1=1 ` // 1=1 é um truque para facilitar a concatenação de WHERE clauses
+
+	args := []interface{}{}
+	argCounter := 1 // Contador para os parâmetros SQL ($1, $2, ...)
+
+	// Aplicar Filtros (Exemplo: Name e SKU)
+	if filter.Name != "" {
+		query += fmt.Sprintf(" AND name ILIKE $%d", argCounter) // ILIKE para busca case-insensitive
+		args = append(args, "%"+filter.Name+"%")
+		argCounter++
+	}
+
+	if filter.SKU != "" {
+		query += fmt.Sprintf(" AND sku = $%d", argCounter)
+		args = append(args, filter.SKU)
+		argCounter++
+	}
+
+	if filter.ActiveOnly {
+		query += fmt.Sprintf(" AND is_active = $%d", argCounter)
+		args = append(args, true)
+		argCounter++
+	}
+
+	// Opcional: Ordenar para garantir consistência na paginação
+	query += " ORDER BY created_at DESC"
+
+	// --- 2. Aplicar Paginação (LIMIT e OFFSET) ---
+
+	// Definir LIMIT (máximo de itens por página)
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 10 // Padrão: 10 itens por página
+	}
+	query += fmt.Sprintf(" LIMIT $%d", argCounter)
+	args = append(args, limit)
+	argCounter++
+
+	// Definir OFFSET (Pular itens: (Page - 1) * Limit)
+	offset := (filter.Page - 1) * limit
+	if offset < 0 {
+		offset = 0
+	}
+	query += fmt.Sprintf(" OFFSET $%d", argCounter)
+	args = append(args, offset)
+
+	r.logger.Debug("Executando FindAll query", map[string]interface{}{"sql": query, "args_count": len(args)})
+
+	// --- 3. Executar a Query e Mapear Resultados ---
+	rows, err := r.DB.QueryContext(ctxGo, query, args...)
+	if err != nil {
+		r.logger.Error("Falha ao executar FindAll query.", err)
+		return nil, errors.NewDBError("Falha ao buscar produtos (FindAll)", err)
+	}
+	defer rows.Close()
+
+	var products []domain.Product
+	for rows.Next() {
+		var p domain.Product
+		err := rows.Scan(
+			&p.ID,
+			&p.SKU,
+			&p.Name,
+			&p.Description,
+			&p.Price,
+			&p.IsActive,
+			&p.CreatedAt,
+			&p.UpdatedAt,
+		)
+		if err != nil {
+			r.logger.Error("Falha ao mapear produto na iteração de FindAll.", err)
+			return nil, errors.NewDBError("Falha ao mapear produtos do DB (FindAll)", err)
+		}
+
+		// 🚨 Opcional: Anexar Variações (Se necessário, você chamaria FindVariantsByProductID aqui)
+		// Por questões de performance na listagem, geralmente as variantes NÃO são carregadas aqui.
+		// Se precisar, adicione a lógica de FindVariantsByProductID para cada produto.
+
+		products = append(products, p)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("Erro após iteração de produtos FindAll.", err)
+		return nil, errors.NewDBError("Erro após iteração de produtos (FindAll)", err)
+	}
+
+	r.logger.Info("FindAll concluído com sucesso.", map[string]interface{}{"total_results": len(products)})
+	return products, nil
+}

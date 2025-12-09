@@ -9,6 +9,7 @@ import (
 	"gostock/internal/pkg/logger" // Importação correta do nosso pacote Logger
 	"gostock/internal/pkg/middleware"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -17,6 +18,7 @@ import (
 type ProductService interface {
 	CreateProduct(ctx domain.Context, p domain.Product, variants []domain.Variant) (domain.Product, error)
 	GetProductByID(ctx domain.Context, id string) (domain.Product, error)
+	GetProducts(ctx domain.Context, page, limit int, filters map[string]string) ([]domain.Product, error)
 	// ...
 }
 
@@ -190,4 +192,59 @@ func (h *Handler) GetProductByIDHandler(w http.ResponseWriter, r *http.Request) 
 
 	// 4. Resposta de Sucesso (200 OK)
 	h.handleServiceResponse(w, r, product, nil, http.StatusOK)
+}
+
+// GetProductsHandler lida com a requisição GET /v1/products.
+func (h *Handler) GetProductsHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// 1. Extrair Parâmetros de Paginação e Filtro
+	query := r.URL.Query()
+
+	page, err := parseIntOrDefault(query.Get("page"), 1)
+	if err != nil {
+		h.handleServiceResponse(w, r, nil, apperror.NewValidationError("Parâmetro 'page' inválido."), http.StatusBadRequest)
+		return
+	}
+
+	limit, err := parseIntOrDefault(query.Get("limit"), 10)
+	if err != nil {
+		h.handleServiceResponse(w, r, nil, apperror.NewValidationError("Parâmetro 'limit' inválido."), http.StatusBadRequest)
+		return
+	}
+	if limit > 100 { // Limite máximo para evitar sobrecarga
+		limit = 100
+	}
+
+	filters := make(map[string]string)
+	for key, values := range query {
+		if key != "page" && key != "limit" {
+			filters[key] = values[0] // Assume um único valor por filtro
+		}
+	}
+
+	// 2. Chamar o Serviço (Lógica de Negócio)
+	products, err := h.Service.GetProducts(ctx, page, limit, filters)
+	if err != nil {
+		h.handleServiceResponse(w, r, nil, err, http.StatusOK) // Erro do serviço
+		return
+	}
+
+	// 3. Resposta de Sucesso (200 OK)
+	h.handleServiceResponse(w, r, products, nil, http.StatusOK)
+}
+
+// parseIntOrDefault é uma função auxiliar para parsear int ou retornar default.
+func parseIntOrDefault(s string, defaultValue int) (int, error) {
+	if s == "" {
+		return defaultValue, nil
+	}
+	val, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, err
+	}
+	if val <= 0 { // Garante que page/limit são positivos
+		return defaultValue, nil
+	}
+	return val, nil
 }

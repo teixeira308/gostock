@@ -23,11 +23,12 @@ type ProductRepository interface {
 	// pois o Repositório é a camada de infraestrutura.
 	Save(ctx context.Context, product domain.Product) (domain.Product, error)
 	FindByID(ctx domain.Context, id string) (domain.Product, error)
+	FindAll(ctx context.Context, filter domain.ProductFilter) ([]domain.Product, error)
 }
 
 // Service é a estrutura que implementa a interface domain.ProductService.
 type Service struct {
-	repo ProductRepository
+	repo   ProductRepository
 	logger logger.Logger
 }
 
@@ -158,4 +159,52 @@ func (s *Service) validateProduct(p domain.Product) error {
 	}
 
 	return nil
+}
+
+// --- Implementação: GetProducts ---
+func (s *Service) GetProducts(ctx domain.Context, page, limit int, filters map[string]string) ([]domain.Product, error) {
+	s.logger.Debug("Iniciando listagem de produtos no serviço.", map[string]interface{}{"page": page, "limit": limit, "filters": filters})
+
+	// Construir o ProductFilter a partir dos parâmetros
+	productFilter := domain.ProductFilter{
+		Page:  page,
+		Limit: limit,
+	}
+
+	if name, ok := filters["name"]; ok {
+		productFilter.Name = name
+	}
+	if sku, ok := filters["sku"]; ok {
+		productFilter.SKU = sku
+	}
+	if active, ok := filters["is_active"]; ok {
+		productFilter.ActiveOnly = (active == "true")
+	}
+
+	// 1. Aplica Regras de Limite (Safeguarding)
+	if productFilter.Limit > 100 {
+		productFilter.Limit = 100 // Limite máximo para evitar sobrecarga no DB
+	}
+	if productFilter.Page < 1 {
+		productFilter.Page = 1
+	}
+
+	// 2. Casting e Configuração do Contexto
+	ctxGo, ok := ctx.(context.Context)
+	if !ok {
+		ctxGo = context.Background()
+		s.logger.Warn("Contexto de domínio inválido, usando context.Background() para GetProducts", nil)
+	}
+
+	// 3. Delegação para o Repositório
+	products, err := s.repo.FindAll(ctxGo, productFilter)
+
+	if err != nil {
+		s.logger.Error("Erro ao buscar produtos no repositório.", err)
+		// Propaga erros (DBError, etc.)
+		return nil, err
+	}
+
+	s.logger.Info("Produtos listados com sucesso.", map[string]interface{}{"total_products": len(products)})
+	return products, nil
 }

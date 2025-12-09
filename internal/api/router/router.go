@@ -41,7 +41,7 @@ func NewRouter(productHandler *product.Handler, userHandler *user.Handler, token
 			finalHandler := permissionMware(productHandler.CreateProductHandler)
 			authMiddleware(finalHandler).ServeHTTP(w, r)
 		case http.MethodGet:
-			http.Error(w, "Listagem de produtos (GET /v1/products) não implementada.", http.StatusNotImplemented)
+			productHandler.GetProductsHandler(w, r)
 		default:
 			http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)
 		}
