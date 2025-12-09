@@ -22,10 +22,16 @@ import (
 	"gostock/internal/api/product" // Handlers
 	"gostock/internal/api/router"  // Roteador central
 	"gostock/internal/api/user"
+	"gostock/internal/api/stock" // Handler de Estoque
+	"gostock/internal/api/warehouse" // NOVO: Handler de Armazém
 	"gostock/internal/repository/productrepo" // Acesso a Dados
 	"gostock/internal/repository/userrepo"
+	"gostock/internal/repository/stockrepo" // Repositório de Estoque
+	"gostock/internal/repository/warehouserepo" // NOVO: Repositório de Armazém
 	"gostock/internal/service/productservice" // Lógica de Negócio
 	"gostock/internal/service/userservice"
+	"gostock/internal/service/stockservice" // Serviço de Estoque
+	"gostock/internal/service/warehouseservice" // NOVO: Serviço de Armazém
 )
 
 func main() {
@@ -61,41 +67,67 @@ func main() {
 	// 3. INJEÇÃO DE DEPENDÊNCIAS (Montagem da Clean Architecture)
 	// Ordem: Repository -> Service -> Handler
 
-	// A. Repositório (Camada de Acesso a Dados)
-	// Recebe as conexões de Infraestrutura
-	productRepo := productrepo.NewProductRepository(db, cacheClient, cfg.DBTimeout, log) // Passando o logger para o repositório
+	// A. Repositório de Produto (Camada de Acesso a Dados)
+	productRepo := productrepo.NewProductRepository(db, cacheClient, cfg.DBTimeout, log)
 	log.Debug("Repositório de Produto inicializado.", nil)
 
-	// B. Serviço (Camada de Lógica de Negócio)
-	// Recebe o Repositório (a interface domain.ProductRepository)
-	productSvc := productservice.NewService(productRepo, log) // Passando o logger para o serviço
+	// B. Serviço de Produto (Camada de Lógica de Negócio)
+	productSvc := productservice.NewService(productRepo, log)
 	log.Debug("Serviço de Produto inicializado.", nil)
 
-	// C. Handler (Camada de Apresentação)
-	// Recebe o Serviço (a interface domain.ProductService)
-	productHandler := product.NewHandler(productSvc, log) // Passando o logger para o handler
+	// C. Handler de Produto (Camada de Apresentação)
+	productHandler := product.NewHandler(productSvc, log)
 	log.Debug("Handler de Produto inicializado.", nil)
 
-	// C. Serviço de Tokens (JWT)
+	// D. Serviço de Tokens (JWT)
 	jwtExpiry := time.Hour * time.Duration(cfg.JWTExpiryHours)
 	tokenSvc := token.NewService(cfg.JWTSecretKey, jwtExpiry)
 	log.Debug("Serviço de Tokens JWT inicializado.", nil)
 
-	// C. Repositório de Usuário (Camada de Acesso a Dados)
-	userRepo := userrepo.NewUserRepository(db, cfg.DBTimeout, log) // Passando o logger para o repositório
+	// E. Repositório de Usuário (Camada de Acesso a Dados)
+	userRepo := userrepo.NewUserRepository(db, cfg.DBTimeout, log)
 	log.Debug("Repositório de Usuário inicializado.", nil)
 
-	userSvc := userservice.NewService(userRepo, tokenSvc, log) // Passando o logger para o serviço
+	// F. Serviço de Usuário (Camada de Lógica de Negócio)
+	userSvc := userservice.NewService(userRepo, tokenSvc, log)
 	log.Debug("Serviço de Usuário inicializado.", nil)
 
-	// E. Handler de Usuário
+	// G. Handler de Usuário
 	userHandler := user.NewHandler(userSvc, log)
 	log.Debug("Handler de Usuário inicializado.", nil)
+
+	// --- Estoque ---
+	// H. Repositório de Estoque
+	stockRepo := stockrepo.NewStockRepository(db, cfg.DBTimeout, log)
+	log.Debug("Repositório de Estoque inicializado.", nil)
+
+	// I. Serviço de Estoque
+	stockSvc := stockservice.NewService(stockRepo, log)
+	log.Debug("Serviço de Estoque inicializado.", nil)
+
+	// J. Handler de Estoque
+	stockHandler := stock.NewHandler(stockSvc, log)
+	log.Debug("Handler de Estoque inicializado.", nil)
+	// --- FIM Estoque ---
+
+	// --- NOVO: Armazéns ---
+	// K. Repositório de Armazéns
+	warehouseRepo := warehouserepo.NewWarehouseRepository(db, cfg.DBTimeout, log)
+	log.Debug("Repositório de Armazéns inicializado.", nil)
+
+	// L. Serviço de Armazéns
+	warehouseSvc := warehouseservice.NewService(warehouseRepo, log)
+	log.Debug("Serviço de Armazéns inicializado.", nil)
+
+	// M. Handler de Armazéns
+	warehouseHandler := warehouse.NewHandler(warehouseSvc, log)
+	log.Debug("Handler de Armazéns inicializado.", nil)
+	// --- FIM NOVO: Armazéns ---
 
 	// 4. Configuração e Início do Roteador/Servidor
 
 	// O roteador recebe os Handlers e aplica middlewares (futuramente)
-	r := router.NewRouter(productHandler, userHandler, tokenSvc, cacheClient)
+	r := router.NewRouter(productHandler, userHandler, stockHandler, warehouseHandler, tokenSvc, cacheClient)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
