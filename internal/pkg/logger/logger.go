@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"strings" // Adicionado para strings.ToLower
 	"time"
 )
 
@@ -78,8 +79,9 @@ func (l *SimpleLogger) shouldLog(level string) bool {
 	levels := map[string]int{
 		"debug": 0,
 		"info":  1,
-		"error": 2,
-		"fatal": 3,
+		"warn":  2, // Adicionado nível de warning
+		"error": 3,
+		"fatal": 4,
 	}
 
 	currentLevel, ok := levels[l.logLevel]
@@ -87,7 +89,7 @@ func (l *SimpleLogger) shouldLog(level string) bool {
 		currentLevel = 1 // Default to info
 	}
 
-	targetLevel, ok := levels[level]
+	targetLevel, ok := levels[strings.ToLower(level)] // Converte para minúsculas para comparação
 	if !ok {
 		return false
 	}
