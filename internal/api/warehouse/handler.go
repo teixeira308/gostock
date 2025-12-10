@@ -70,6 +70,17 @@ func (h *Handler) handleServiceResponse(w http.ResponseWriter, r *http.Request, 
 }
 
 // CreateWarehouseHandler lida com a requisição POST /v1/warehouses.
+// @Summary Cria um novo armazém
+// @Description Cria um novo armazém no sistema.
+// @Tags warehouses
+// @Accept json
+// @Produce json
+// @Param warehouse body domain.Warehouse true "Dados do armazém para criação"
+// @Success 201 {object} domain.Warehouse "Armazém criado com sucesso"
+// @Failure 400 {object} domain.ErrorResponse "Payload inválido"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
+// @Security ApiKeyAuth
+// @Router /warehouses [post]
 func (h *Handler) CreateWarehouseHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)
@@ -93,6 +104,15 @@ func (h *Handler) CreateWarehouseHandler(w http.ResponseWriter, r *http.Request)
 }
 
 // GetWarehouseByIDHandler lida com a requisição GET /v1/warehouses/{id}.
+// @Summary Obtém um armazém por ID
+// @Description Busca um armazém específico pelo seu ID.
+// @Tags warehouses
+// @Produce json
+// @Param id path string true "ID do Armazém"
+// @Success 200 {object} domain.Warehouse "Armazém encontrado"
+// @Failure 404 {object} domain.ErrorResponse "Armazém não encontrado"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
+// @Router /warehouses/{id} [get]
 func (h *Handler) GetWarehouseByIDHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)
@@ -112,6 +132,13 @@ func (h *Handler) GetWarehouseByIDHandler(w http.ResponseWriter, r *http.Request
 }
 
 // GetAllWarehousesHandler lida com a requisição GET /v1/warehouses.
+// @Summary Lista todos os armazéns
+// @Description Retorna uma lista de todos os armazéns cadastrados.
+// @Tags warehouses
+// @Produce json
+// @Success 200 {array} domain.Warehouse "Lista de armazéns"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
+// @Router /warehouses [get]
 func (h *Handler) GetAllWarehousesHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)
@@ -129,6 +156,19 @@ func (h *Handler) GetAllWarehousesHandler(w http.ResponseWriter, r *http.Request
 }
 
 // UpdateWarehouseHandler lida com a requisição PUT /v1/warehouses/{id}.
+// @Summary Atualiza um armazém
+// @Description Atualiza os dados de um armazém existente.
+// @Tags warehouses
+// @Accept json
+// @Produce json
+// @Param id path string true "ID do Armazém"
+// @Param warehouse body domain.Warehouse true "Dados do armazém para atualização"
+// @Success 200 {object} domain.Warehouse "Armazém atualizado com sucesso"
+// @Failure 400 {object} domain.ErrorResponse "Payload inválido"
+// @Failure 404 {object} domain.ErrorResponse "Armazém não encontrado"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
+// @Security ApiKeyAuth
+// @Router /warehouses/{id} [put]
 func (h *Handler) UpdateWarehouseHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)
@@ -155,6 +195,15 @@ func (h *Handler) UpdateWarehouseHandler(w http.ResponseWriter, r *http.Request)
 }
 
 // DeleteWarehouseHandler lida com a requisição DELETE /v1/warehouses/{id}.
+// @Summary Deleta um armazém
+// @Description Remove um armazém do sistema pelo seu ID.
+// @Tags warehouses
+// @Param id path string true "ID do Armazém"
+// @Success 204 "Nenhum conteúdo"
+// @Failure 404 {object} domain.ErrorResponse "Armazém não encontrado"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
+// @Security ApiKeyAuth
+// @Router /warehouses/{id} [delete]
 func (h *Handler) DeleteWarehouseHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)

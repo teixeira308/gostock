@@ -64,6 +64,18 @@ func (h *Handler) handleServiceResponse(w http.ResponseWriter, r *http.Request, 
 }
 
 // AdjustStockHandler lida com a requisição POST /v1/stock/update.
+// @Summary Ajusta o nível de estoque de um produto em um armazém
+// @Description Atualiza a quantidade de estoque para uma variante de produto em um armazém específico.
+// @Tags stock
+// @Accept json
+// @Produce json
+// @Param adjustment body domain.StockAdjustmentRequest true "Dados para ajuste de estoque"
+// @Success 200 {object} domain.StockLevel "Nível de estoque atualizado"
+// @Failure 400 {object} domain.ErrorResponse "Payload inválido"
+// @Failure 409 {object} domain.ErrorResponse "Conflito de concorrência (versão)"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
+// @Security ApiKeyAuth
+// @Router /stock/update [post]
 func (h *Handler) AdjustStockHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Método não permitido", http.StatusMethodNotAllowed)

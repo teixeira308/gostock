@@ -240,19 +240,26 @@ A API utiliza um sistema de logging estruturado e configurável para registro de
 *   **Uso em Camadas:** O logger é injetado e utilizado extensivamente nas camadas de Handlers, Services e Repositórios para registrar o fluxo da requisição, sucesso, avisos e erros. Erros críticos (500) são registrados com detalhes para auxiliar na depuração.
 *   **Configurável:** O nível de log é configurado via variável de ambiente `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `fatal`).
 
+#### 5.4 Cobertura de Testes Unitários
+A camada de Serviço (`internal/service/*`), que contém as principais regras de negócio da aplicação, possui uma cobertura de testes unitários.
+*   **Como Funciona:** Os testes para cada serviço (ex: `productservice`, `warehouseservice`) utilizam mocks da camada de repositório para isolar a lógica de negócio e garantir que ela se comporte como esperado em diversos cenários (sucesso, falha, casos de borda).
+*   **Execução:** Os testes podem ser executados com o comando `go test` dentro de cada diretório de serviço.
+
+#### 5.5 Coleção Postman
+Para facilitar a interação e os testes manuais da API, uma coleção do Postman está disponível no projeto.
+*   **Arquivo:** `gostock_postman_collection.json` (na raiz do projeto).
+*   **Conteúdo:** A coleção contém requisições pré-configuradas para todos os endpoints da API, incluindo exemplos de corpos de requisição e os cabeçalhos necessários (como o de `Authorization` para rotas protegidas).
+
+#### 5.6 Documentação da API (Swagger)
+A API possui uma documentação interativa gerada automaticamente a partir do código-fonte usando a ferramenta `swaggo`.
+*   **Acesso:** Com o servidor rodando, a documentação pode ser acessada em `http://localhost:8080/swagger/index.html`.
+*   **Atualização:** Para refletir novas alterações nos comentários da API, gere novamente a documentação com o comando: `swag init -g cmd/main.go`.
+
 ---
 
 ## 🛣️ Próximos Passos e Roadmap
 
-A funcionalidade básica de Catálogo de Produtos (CRUD e Cache), gerenciamento de Estoque e Armazéns, e segurança (AuthN/AuthZ) está completa. O trabalho futuro focará em robustez e observabilidade para tornar a API pronta para produção.
+A funcionalidade básica de Catálogo de Produtos (CRUD e Cache), gerenciamento de Estoque e Armazéns, e segurança (AuthN/AuthZ) está completa e testada. O trabalho futuro focará em robustez e observabilidade para tornar a API pronta para produção.
 
 ### 1. 📊 Observabilidade e Monitoramento
-Garantir que a aplicação seja visível e que seu desempenho possa ser rastreado.
-*   **Implementação do Logger:** Concluído. A integração do **Logger** foi realizada em todas as camadas (Handlers, Services e Repositórios), garantindo o registro adequado de eventos em diferentes níveis (`Debug`, `Info`, `Warn`, `Error`, `Fatal`) para facilitar o rastreamento da causa raiz dos erros.
-*   **Basic Server Metrics:** Adicionar instrumentação para coletar métricas internas (latência, contagem de erros, uso de memória) e expô-las em um *endpoint* padrão (ex: `/metrics`) para integração com **Prometheus e Grafana**.
-
-### 2. 📝 Manutenção e Documentação
-Aumentar a qualidade do código através de testes e melhorar a experiência do desenvolvedor (DX).
-*   **Testing Overview:** Desenvolver testes unitários para a camada de Serviço (regras de negócio) e testes de integração para o Repositório e Handlers.
-*   **Auto Generating Docs (Swagger):** Integrar ferramentas de documentação (*doc generation*) para criar uma especificação OpenAPI (Swagger) automaticamente a partir dos comentários no código, disponibilizando uma interface interativa (ex: `/swagger/index.html`).
-*   **Postman Collection:** Uma coleção Postman (`gostock_postman_collection.json`) foi gerada para facilitar os testes manuais dos endpoints implementados.
+*   **Métricas do Servidor:** Adicionar instrumentação para coletar métricas internas (latência, contagem de erros, uso de memória) e expô-las em um endpoint padrão (ex: `/metrics`) para integração com **Prometheus e Grafana**.

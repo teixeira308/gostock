@@ -85,7 +85,24 @@ func (h *Handler) handleServiceResponse(w http.ResponseWriter, r *http.Request, 
 
 // --- Handlers de Produto ---
 
+// ProductCreateRequest define o payload para a criação de um produto.
+type ProductCreateRequest struct {
+	Product  domain.Product   `json:"Product"`
+	Variants []domain.Variant `json:"Variants"`
+}
+
 // CreateProductHandler lida com a requisição POST /v1/products.
+// @Summary Cria um novo produto com variantes
+// @Description Cria um novo produto principal e suas variantes.
+// @Tags products
+// @Accept json
+// @Produce json
+// @Param product body ProductCreateRequest true "Dados do produto e variantes"
+// @Success 201 {object} domain.Product "Produto criado com sucesso"
+// @Failure 400 {object} domain.ErrorResponse "Payload inválido"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
+// @Security ApiKeyAuth
+// @Router /products [post]
 func (h *Handler) CreateProductHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		// Aqui, o log de erro simples é aceitável, pois é um erro de protocolo base.
@@ -111,10 +128,7 @@ func (h *Handler) CreateProductHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Decodificação do Payload (Usando struct anônima temporária para incluir Variants)
-	var productRequest struct {
-		Product  domain.Product   `json:"Product"`
-		Variants []domain.Variant `json:"Variants"`
-	}
+	var productRequest ProductCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&productRequest); err != nil {
 		// Usa a função padronizada para erros de validação
 		// (Ajustei o status para 400 Bad Request, que é o correto para erro de payload)
@@ -154,6 +168,15 @@ func (h *Handler) CreateProductHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetProductByIDHandler lida com a requisição GET /v1/products/{id}.
+// @Summary Obtém um produto por ID
+// @Description Busca um produto específico e suas variantes pelo ID.
+// @Tags products
+// @Produce json
+// @Param id path string true "ID do Produto"
+// @Success 200 {object} domain.Product "Produto encontrado"
+// @Failure 404 {object} domain.ErrorResponse "Produto não encontrado"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
+// @Router /products/{id} [get]
 func (h *Handler) GetProductByIDHandler(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
@@ -195,6 +218,19 @@ func (h *Handler) GetProductByIDHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 // GetProductsHandler lida com a requisição GET /v1/products.
+// @Summary Lista produtos com filtros e paginação
+// @Description Retorna uma lista de produtos com base em filtros e paginação.
+// @Tags products
+// @Produce json
+// @Param page query int false "Número da página" default(1)
+// @Param limit query int false "Limite de itens por página" default(10)
+// @Param name query string false "Filtrar por nome do produto"
+// @Param sku query string false "Filtrar por SKU"
+// @Param active_only query boolean false "Filtrar apenas por produtos ativos"
+// @Success 200 {array} domain.Product "Lista de produtos"
+// @Failure 400 {object} domain.ErrorResponse "Parâmetros de query inválidos"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
+// @Router /products [get]
 func (h *Handler) GetProductsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

@@ -1,0 +1,521 @@
+basePath: /v1
+definitions:
+  domain.ErrorResponse:
+    description: Estrutura padronizada para respostas de erro na API.
+    properties:
+      category:
+        example: VALIDATION_ERROR
+        type: string
+      code:
+        example: 400
+        type: integer
+      message:
+        example: O nome do armazém não pode ser vazio.
+        type: string
+    type: object
+  domain.Product:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      price:
+        type: number
+      sku:
+        description: Stock Keeping Unit (código único de produto)
+        type: string
+      updated_at:
+        type: string
+      variants:
+        description: |-
+          Relações (serão gerenciadas por outras entidades/serviços)
+          Variantes []Variant // Exemplo: Lista de tamanhos/cores
+        items:
+          $ref: '#/definitions/domain.Variant'
+        type: array
+    type: object
+  domain.StockAdjustmentRequest:
+    properties:
+      delta:
+        description: Quantidade a ser adicionada/removida
+        type: integer
+      variant_id:
+        type: string
+      warehouse_id:
+        type: string
+    required:
+    - delta
+    - variant_id
+    - warehouse_id
+    type: object
+  domain.StockLevel:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      quantity:
+        type: integer
+      updated_at:
+        type: string
+      variant_id:
+        type: string
+      version:
+        description: Para Controle de Concorrência Otimista (OCC)
+        type: integer
+      warehouse_id:
+        type: string
+    type: object
+  domain.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      role:
+        $ref: '#/definitions/domain.UserRole'
+      updated_at:
+        type: string
+    type: object
+  domain.UserRegistration:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  domain.UserRole:
+    enum:
+    - admin
+    - user
+    - guest
+    type: string
+    x-enum-varnames:
+    - RoleAdmin
+    - RoleUser
+    - RoleGuest
+  domain.Variant:
+    properties:
+      attribute:
+        description: 'Ex: "Cor"'
+        type: string
+      barcode:
+        type: string
+      id:
+        type: string
+      price_diff:
+        description: Ajuste de preço para esta variante
+        type: number
+      product_id:
+        type: string
+      value:
+        description: 'Ex: "Vermelho"'
+        type: string
+    type: object
+  domain.Warehouse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  product.ProductCreateRequest:
+    properties:
+      Product:
+        $ref: '#/definitions/domain.Product'
+      Variants:
+        items:
+          $ref: '#/definitions/domain.Variant'
+        type: array
+    type: object
+  user.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: This is a sample server for a stock management system.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: GoStock API
+  version: "1.0"
+paths:
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Recebe email/senha, verifica a validade e emite um JSON Web Token.
+      parameters:
+      - description: Credenciais do usuário (email e senha)
+        in: body
+        name: login
+        required: true
+        schema:
+          $ref: '#/definitions/user.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token JWT emitido
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Payload inválido
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "401":
+          description: Credenciais inválidas
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Autentica um usuário e retorna um JWT
+      tags:
+      - users
+  /products:
+    get:
+      description: Retorna uma lista de produtos com base em filtros e paginação.
+      parameters:
+      - default: 1
+        description: Número da página
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Limite de itens por página
+        in: query
+        name: limit
+        type: integer
+      - description: Filtrar por nome do produto
+        in: query
+        name: name
+        type: string
+      - description: Filtrar por SKU
+        in: query
+        name: sku
+        type: string
+      - description: Filtrar apenas por produtos ativos
+        in: query
+        name: active_only
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Lista de produtos
+          schema:
+            items:
+              $ref: '#/definitions/domain.Product'
+            type: array
+        "400":
+          description: Parâmetros de query inválidos
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Lista produtos com filtros e paginação
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Cria um novo produto principal e suas variantes.
+      parameters:
+      - description: Dados do produto e variantes
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/product.ProductCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Produto criado com sucesso
+          schema:
+            $ref: '#/definitions/domain.Product'
+        "400":
+          description: Payload inválido
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Cria um novo produto com variantes
+      tags:
+      - products
+  /products/{id}:
+    get:
+      description: Busca um produto específico e suas variantes pelo ID.
+      parameters:
+      - description: ID do Produto
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Produto encontrado
+          schema:
+            $ref: '#/definitions/domain.Product'
+        "404":
+          description: Produto não encontrado
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Obtém um produto por ID
+      tags:
+      - products
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Cria um novo usuário, hasheia a senha e salva no banco de dados.
+      parameters:
+      - description: Credenciais de registro (email e senha)
+        in: body
+        name: registration
+        required: true
+        schema:
+          $ref: '#/definitions/domain.UserRegistration'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Usuário criado com sucesso
+          schema:
+            $ref: '#/definitions/domain.User'
+        "400":
+          description: Payload inválido (JSON malformado ou campos obrigatórios ausentes)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "409":
+          description: Email já cadastrado
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Registra um novo usuário
+      tags:
+      - users
+  /stock/update:
+    post:
+      consumes:
+      - application/json
+      description: Atualiza a quantidade de estoque para uma variante de produto em
+        um armazém específico.
+      parameters:
+      - description: Dados para ajuste de estoque
+        in: body
+        name: adjustment
+        required: true
+        schema:
+          $ref: '#/definitions/domain.StockAdjustmentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Nível de estoque atualizado
+          schema:
+            $ref: '#/definitions/domain.StockLevel'
+        "400":
+          description: Payload inválido
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "409":
+          description: Conflito de concorrência (versão)
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Ajusta o nível de estoque de um produto em um armazém
+      tags:
+      - stock
+  /warehouses:
+    get:
+      description: Retorna uma lista de todos os armazéns cadastrados.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Lista de armazéns
+          schema:
+            items:
+              $ref: '#/definitions/domain.Warehouse'
+            type: array
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Lista todos os armazéns
+      tags:
+      - warehouses
+    post:
+      consumes:
+      - application/json
+      description: Cria um novo armazém no sistema.
+      parameters:
+      - description: Dados do armazém para criação
+        in: body
+        name: warehouse
+        required: true
+        schema:
+          $ref: '#/definitions/domain.Warehouse'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Armazém criado com sucesso
+          schema:
+            $ref: '#/definitions/domain.Warehouse'
+        "400":
+          description: Payload inválido
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Cria um novo armazém
+      tags:
+      - warehouses
+  /warehouses/{id}:
+    delete:
+      description: Remove um armazém do sistema pelo seu ID.
+      parameters:
+      - description: ID do Armazém
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Nenhum conteúdo
+        "404":
+          description: Armazém não encontrado
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Deleta um armazém
+      tags:
+      - warehouses
+    get:
+      description: Busca um armazém específico pelo seu ID.
+      parameters:
+      - description: ID do Armazém
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Armazém encontrado
+          schema:
+            $ref: '#/definitions/domain.Warehouse'
+        "404":
+          description: Armazém não encontrado
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      summary: Obtém um armazém por ID
+      tags:
+      - warehouses
+    put:
+      consumes:
+      - application/json
+      description: Atualiza os dados de um armazém existente.
+      parameters:
+      - description: ID do Armazém
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Dados do armazém para atualização
+        in: body
+        name: warehouse
+        required: true
+        schema:
+          $ref: '#/definitions/domain.Warehouse'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Armazém atualizado com sucesso
+          schema:
+            $ref: '#/definitions/domain.Warehouse'
+        "400":
+          description: Payload inválido
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "404":
+          description: Armazém não encontrado
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+        "500":
+          description: Erro interno do servidor
+          schema:
+            $ref: '#/definitions/domain.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Atualiza um armazém
+      tags:
+      - warehouses
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

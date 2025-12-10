@@ -79,9 +79,9 @@ func (h *Handler) handleServiceResponse(w http.ResponseWriter, r *http.Request, 
 // @Produce json
 // @Param registration body domain.UserRegistration true "Credenciais de registro (email e senha)"
 // @Success 201 {object} domain.User "Usuário criado com sucesso"
-// @Failure 400 {object} apperror.ValidationError "Payload inválido (JSON malformado ou campos obrigatórios ausentes)"
-// @Failure 409 {object} apperror.ConflictError "Email já cadastrado"
-// @Failure 500 {object} apperror.InternalError "Erro interno do servidor"
+// @Failure 400 {object} domain.ErrorResponse "Payload inválido (JSON malformado ou campos obrigatórios ausentes)"
+// @Failure 409 {object} domain.ErrorResponse "Email já cadastrado"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
 // @Router /register [post]
 func (h *Handler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -124,9 +124,9 @@ func (h *Handler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param login body LoginRequest true "Credenciais do usuário (email e senha)"
 // @Success 200 {object} map[string]string "Token JWT emitido"
-// @Failure 400 {object} apperror.ValidationError "Payload inválido"
-// @Failure 401 {object} apperror.UnauthorizedError "Credenciais inválidas"
-// @Failure 500 {object} apperror.InternalError "Erro interno do servidor"
+// @Failure 400 {object} domain.ErrorResponse "Payload inválido"
+// @Failure 401 {object} domain.ErrorResponse "Credenciais inválidas"
+// @Failure 500 {object} domain.ErrorResponse "Erro interno do servidor"
 // @Router /login [post]
 func (h *Handler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
