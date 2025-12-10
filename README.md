@@ -256,10 +256,3 @@ A API possui uma documentação interativa gerada automaticamente a partir do c�
 *   **Atualização:** Para refletir novas alterações nos comentários da API, gere novamente a documentação com o comando: `swag init -g cmd/main.go`.
 
 ---
-
-## 🛣️ Próximos Passos e Roadmap
-
-A funcionalidade básica de Catálogo de Produtos (CRUD e Cache), gerenciamento de Estoque e Armazéns, e segurança (AuthN/AuthZ) está completa e testada. O trabalho futuro focará em robustez e observabilidade para tornar a API pronta para produção.
-
-### 1. 📊 Observabilidade e Monitoramento
-*   **Métricas do Servidor:** Adicionar instrumentação para coletar métricas internas (latência, contagem de erros, uso de memória) e expô-las em um endpoint padrão (ex: `/metrics`) para integração com **Prometheus e Grafana**.
