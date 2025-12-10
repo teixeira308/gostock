@@ -22,7 +22,7 @@ type ProductRepository interface {
 	// 🚨 CORREÇÃO DE ASSINATURA: A implementação deve usar context.Context nativo,
 	// pois o Repositório é a camada de infraestrutura.
 	Save(ctx context.Context, product domain.Product) (domain.Product, error)
-	FindByID(ctx domain.Context, id string) (domain.Product, error)
+	FindByID(ctx context.Context, id string) (domain.Product, error)
 	FindAll(ctx context.Context, filter domain.ProductFilter) ([]domain.Product, error)
 }
 
@@ -201,8 +201,12 @@ func (s *Service) GetProducts(ctx domain.Context, page, limit int, filters map[s
 
 	if err != nil {
 		s.logger.Error("Erro ao buscar produtos no repositório.", err)
-		// Propaga erros (DBError, etc.)
-		return nil, err
+		// Wrap errors in InternalError if they are not already translated domain errors
+		var internalErr *apperror.InternalError
+		if !errors.As(err, &internalErr) { // If it's not already an InternalError
+			return nil, apperror.NewInternalError("Falha interna ao buscar produtos.", err)
+		}
+		return nil, err // If it's already an InternalError, propagate as is
 	}
 
 	s.logger.Info("Produtos listados com sucesso.", map[string]interface{}{"total_products": len(products)})

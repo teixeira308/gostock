@@ -111,12 +111,12 @@ const productCacheKey = "product:%s"
 
 // FindByID busca um produto pelo ID, utilizando a estratégia Cache-Aside.
 // (Implementa um dos métodos da interface domain.ProductRepository)
-func (r *ProductRepository) FindByID(ctx domain.Context, id string) (domain.Product, error) {
+func (r *ProductRepository) FindByID(ctx context.Context, id string) (domain.Product, error) {
 	r.logger.Debug("Iniciando FindByID de produto no repositório.", map[string]interface{}{"product_id_attempt": id})
 
-	// 1. Casting e Contexto
-	ctxGo, cancel := context.WithTimeout(ctx.(context.Context),
-		r.DBTimeout) // Assumindo que você adicionou DBTimeout no struct
+	// 1. Contexto
+	ctxGo, cancel := context.WithTimeout(ctx,
+		r.DBTimeout)
 	defer cancel()
 
 	// Chave de Cache
@@ -206,9 +206,9 @@ func (r *ProductRepository) FindByID(ctx domain.Context, id string) (domain.Prod
 }
 
 // FindVariantsByProductID busca todas as variações para um dado ID de produto.
-func (r *ProductRepository) FindVariantsByProductID(ctx domain.Context, productID string) ([]domain.Variant, error) {
+func (r *ProductRepository) FindVariantsByProductID(ctx context.Context, productID string) ([]domain.Variant, error) {
 	r.logger.Debug("Iniciando busca de variantes por ProductID.", map[string]interface{}{"product_id": productID})
-	ctxTimeout, cancel := context.WithTimeout(ctx.(context.Context), r.DBTimeout)
+	ctxTimeout, cancel := context.WithTimeout(ctx, r.DBTimeout)
 	defer cancel()
 
 	query := `

@@ -1,6 +1,7 @@
 📚 GoStock API
 Visão Geral do Projeto
-GoStock é um projeto de API construído em Go (Golang), seguindo os princípios da Arquitetura Limpa (Clean Architecture). O objetivo é fornecer uma solução robusta e escalável para gerenciamento de catálogo de produtos, estoque e transações, utilizando PostgreSQL como banco de dados principal e Redis para caching de alto desempenho.
+GoStock é um projeto de API construído em Go (Golang), seguindo os princípios da Arquitetura Limpa (Clean Architectu
+re). O objetivo é fornecer uma solução robusta e escalável para gerenciamento de catálogo de produtos, estoque e transações, utilizando PostgreSQL como banco de dados principal e Redis para caching de alto desempenho.
 
 🏗️ Arquitetura
 O projeto é estruturado em camadas para garantir separação de responsabilidades, testabilidade e manutenibilidade (Clean Architecture).
